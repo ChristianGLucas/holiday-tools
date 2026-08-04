@@ -108,6 +108,17 @@ language rather than the container's locale, for the same reason.
   Israel, Egypt, Saudi Arabia, Jordan and Qatar, and Friday alone in Iran.
   Every calendar carries its own real weekend, and you can override it per
   request to model a specific organization's working week.
+
+  These weekends are **cross-checked against CLDR** (an independent source, via
+  `locale-tools/DescribeLocale`) — 22 countries verified agreeing. The check also
+  found **7 countries where the two sources genuinely disagree**, and inspection
+  says *both* sources are wrong in different places: this package is right for
+  Bangladesh, Djibouti, the Maldives and Brunei; CLDR is right for Libya;
+  Afghanistan and India are legitimately contested (India's *official* week rests
+  Sunday only, while a five-day corporate week is common). Every one of them is
+  pinned by a regression test so a library upgrade cannot change a weekend
+  silently. **If you need certainty for a contested country, pass
+  `weekend_override` and the answer becomes yours, not the library's.**
 - **Observed vs. actual dates.** A holiday falling on a weekend is often
   observed on an adjacent weekday. Every occurrence is explicitly flagged
   `observed`, determined by comparing calendars rather than parsing the name —

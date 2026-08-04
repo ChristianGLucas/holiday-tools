@@ -34,15 +34,63 @@ def test_skips_a_holiday_and_a_weekend_together():
     assert r.unchanged is False
 
 
-def test_holiday_awareness_is_what_makes_it_differ_from_a_spreadsheet():
-    """A weekend-only calculation (Excel WORKDAY with no holiday list) answers
-    2026-07-07. The correct holiday-aware answer is one working day later,
-    because Independence Day is observed on Friday 2026-07-03."""
+def test_REGRESSION_workday_2026_07_02_plus_3_is_07_08_not_07_07():
+    """THE NAMED REGRESSION CASE for this package's reason to exist.
+
+    Ground truth is INDEPENDENT of the wrapped library — it is US federal law
+    (5 U.S.C. 6103): a holiday falling on a Saturday is observed on the
+    preceding Friday. 2026-07-04 IS a Saturday, so Independence Day 2026 is
+    observed on Friday 2026-07-03. Counting three business days from Thursday
+    2026-07-02:
+
+        Fri 07-03  observed Independence Day  -> skipped
+        Sat 07-04  weekend (and the actual holiday)
+        Sun 07-05  weekend
+        Mon 07-06  business day 1
+        Tue 07-07  business day 2
+        Wed 07-08  business day 3   <- correct answer
+
+    The already-published catalog answer for this exact input is WRONG by one
+    day and gives no error: christiangeorgelucas/spreadsheet-formula-tools
+    Evaluate("WORKDAY(DATE(2026,7,2),3)") was live-invoked on 2026-08-04 and
+    returned Excel serial 46210 = 2026-07-07, because Excel's WORKDAY has no
+    holiday calendar behind it unless the caller supplies one.
+
+    This single case simultaneously proves the package is correct, proves it is
+    not a duplicate of what already exists, and demonstrates the exact silent
+    user harm it prevents.
+    """
+    # Independent ground truth: the actual date is a Saturday, hence observed Friday.
+    assert oracle.US_INDEPENDENCE_DAY_2026 == date(2026, 7, 4)
+    assert oracle.US_INDEPENDENCE_DAY_2026.isoweekday() == 6, "must be a Saturday"
+    assert oracle.US_INDEPENDENCE_DAY_2026_OBSERVED == date(2026, 7, 3)
+    assert oracle.US_INDEPENDENCE_DAY_2026_OBSERVED.isoweekday() == 5, "observed Friday"
+
+    # The holiday-blind answer — what a spreadsheet WORKDAY returns (serial 46210).
     naive = oracle.naive_add_weekdays(date(2026, 7, 2), 3)
     assert naive == date(2026, 7, 7), "contrast oracle must be the holiday-blind answer"
+    assert _excel_serial(naive) == 46210, "must match the serial observed live"
+
+    # This package's answer.
     r = _run("2026-07-02", 3, country="US")
-    assert r.ok and r.date == "2026-07-08"
+    assert r.ok, r.error
+    assert r.date == "2026-07-08", "the whole reason this package exists"
     assert r.date != naive.strftime("%Y-%m-%d"), "the holiday must actually be counted"
+
+    # And the skipped Friday must be skipped BECAUSE of the observed holiday,
+    # not incidentally — otherwise this test could pass for the wrong reason.
+    from nodes.is_business_day import is_business_day
+    from gen.messages_pb2 import DateQuery
+    friday = is_business_day(
+        _Ctx(), DateQuery(calendar=CalendarSpec(country="US"), date="2026-07-03"))
+    assert friday.ok and friday.is_business_day is False
+    assert friday.reason == 3, "HOLIDAY, not WEEKEND — 2026-07-03 is a Friday"
+    assert friday.holidays[0].observed is True
+
+
+def _excel_serial(d: date) -> int:
+    """Excel's 1900-system serial number, for comparing against a spreadsheet."""
+    return (d - date(1899, 12, 30)).days
 
 
 def test_no_holiday_in_the_way_matches_the_naive_oracle():
