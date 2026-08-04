@@ -87,6 +87,10 @@ _MAX_CLOSEST_SCAN_DAYS = 800
 #     SATURDAY to THURSDAY, with FRIDAY the weekly rest day, i.e. a ONE-DAY
 #     (Friday-only) weekend.
 #     https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476
+#     CAVEAT, stated because it is the honest state of the evidence: that URL
+#     returns HTTP 403 to automated fetches, so this leg rests on the NATLEX
+#     record's summary and was NOT independently re-verified by a second reader.
+#     The Friday-Saturday leg below WAS independently corroborated.
 #   * CLDR (Unicode, via Babel) and practice reporting — FRIDAY and SATURDAY,
 #     consistent with reports of a 2006 shift from a one-day to a two-day
 #     weekend and with neighbouring calendars.

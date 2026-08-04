@@ -126,7 +126,7 @@ language rather than the container's locale, for the same reason.
 
   | Source | Libyan weekend |
   |---|---|
-  | ILO NATLEX, [Ministerial Order No. 10 of 2012](https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476) — working days Sat–Thu | **Friday only** |
+  | ILO NATLEX, [Ministerial Order No. 10 of 2012](https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476) — working days Sat–Thu (that URL 403s to automated fetches, so this leg rests on the record summary and was not independently re-verified) | **Friday only** |
   | CLDR + practice reporting (and a reported 2006 shift to a two-day weekend) | **Friday–Saturday** |
 
   **This package returns Friday–Saturday**, because *"is this a working day for
