@@ -8,26 +8,27 @@ description: >-
   ADVANCE or REWIND N business days, COUNT those between two dates, LIST them
   with a reason for each day skipped, and ROLL a date onto a business day under
   the FOLLOWING / PRECEDING / MODIFIED conventions. OFFLINE and DETERMINISTIC -
-  no network, no rate limit, no outage - so it is safe inside a pure-tools flow.
-  Deliberate contrast with christiangeorgelucas/nager-date-connector, which
-  fetches the same data live from date.nager.at: use that one as the
-  authoritative source for current data, this one when the computation must not
-  fail because a website is down. And unlike a spreadsheet's WORKDAY/NETWORKDAYS
-  (via christiangeorgelucas/spreadsheet-formula-tools), every node here KNOWS the
-  holidays: three business days after 2026-07-02 in the US is 2026-07-08, not the
-  2026-07-07 a weekend-only calculation gives, because Independence Day is
-  observed on Friday 2026-07-03. Weekends are country-correct and CLDR-checked
-  (Friday/Saturday for Israel, Egypt, Saudi Arabia, Jordan, Qatar; Friday alone
-  for Iran) and overridable per request. LIBYA is a deliberate documented
-  correction: the library sets no weekend for it and falls back to
-  Saturday/Sunday, which no source supports, so this returns Friday/Saturday per
-  CLDR and practice; the stricter Friday-only legal reading stays reachable via
-  weekend_override. An observed substitute date is flagged, never conflated with
-  a real one; calendars that RELOCATE rather than duplicate a holiday
-  (Netherlands, Israel, Chile) are handled, and ACTUAL_ONLY gives the real date.
-  Every node is CLOCK-FREE: the caller supplies the date, so results reproduce
-  across runs and machines. An unknown subdivision, unsupported language, or
-  out-of-coverage year each return a typed error rather than a silent fallback.
+  no network, no rate limit, no outage - safe inside a pure-tools flow.
+  Complements christiangeorgelucas/nager-date-connector, which serves a live but
+  DIFFERENT, smaller dataset from date.nager.at (202 countries; no Israel, Saudi
+  Arabia, Iran, Jordan, Qatar or India, and no Islamic-calendar holidays for
+  Libya): use that for live upstream data where it has coverage, this for wider
+  offline coverage that cannot fail when a site is down. And unlike a
+  spreadsheet's WORKDAY/NETWORKDAYS (via spreadsheet-formula-tools), every node
+  here KNOWS the holidays: three business days after 2026-07-02 in the US is
+  2026-07-08, not the 2026-07-07 a weekend-only calculation gives, because
+  Independence Day is observed on Friday 2026-07-03. Weekends are
+  country-correct and CLDR-checked (Friday/Saturday for Israel, Egypt, Saudi
+  Arabia, Jordan, Qatar; Friday alone for Iran) and overridable per request.
+  LIBYA is a deliberate documented correction: the library sets no weekend for
+  it and falls back to Saturday/Sunday, which no source supports, so this
+  returns Friday/Saturday per CLDR and practice; the strict Friday-only legal
+  reading stays reachable via weekend_override. An observed substitute date is
+  flagged, never conflated with a real one; calendars that RELOCATE rather than
+  duplicate a holiday (Netherlands, Israel, Chile) are handled, ACTUAL_ONLY
+  gives the real date. Every node is CLOCK-FREE: the caller supplies the date,
+  so results reproduce across runs. Unknown subdivision, bad language, or
+  out-of-range year each return a typed error.
 nodes:
     - name: IsHoliday
       input: DateQuery
@@ -175,5 +176,7 @@ nodes:
         surprises callers - Friday/Saturday for Israel, Egypt, Saudi Arabia,
         Jordan and Qatar, Friday alone for Iran, Saturday/Sunday across most of
         the West - so hard-coding Saturday/Sunday produces confidently wrong
-        answers for those locales. Call this before building a CalendarSpec so
-        every field is a value the calendar actually accepts.
+        answers for those locales. The weekend reported here is the calendar's
+        DEFAULT; a per-request CalendarSpec.weekend_override changes what the
+        other nodes use without changing this. Call this before building a
+        CalendarSpec so every field is a value the calendar actually accepts.

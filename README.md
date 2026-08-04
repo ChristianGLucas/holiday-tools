@@ -244,7 +244,7 @@ Both licences were verified from the `LICENSE` file in the actual distribution.
 
 ```bash
 axiom validate --json   # static checks
-axiom test              # 104 tests, including an independent-oracle suite
+axiom test              # full suite, including an independent-oracle suite
 axiom dev               # local server (port is printed on startup)
 ```
 

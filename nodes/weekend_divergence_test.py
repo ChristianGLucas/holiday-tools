@@ -52,8 +52,11 @@ def test_weekend_matches_cldr_where_the_two_sources_agree():
         assert _weekend(country) == expected, country
 
 
-# Countries where this package (python-holidays) and CLDR DISAGREE. Recorded
-# rather than papered over. `ours` is what this package returns today.
+# Countries where the wrapped library and CLDR DISAGREED when cross-checked.
+# Recorded rather than papered over. `ours` is what this package returns TODAY,
+# which for Libya is a corrected value, not the library's — see
+# test_libya_is_a_deliberate_documented_override_of_upstream. Libya therefore no
+# longer appears in this table: after the correction it AGREES with CLDR.
 CLDR_DISAGREES = {
     #          ours          CLDR         who looks right
     "BD": ([FRI, SAT], [SAT, SUN], "ours — Bangladesh rests Friday-Saturday"),
@@ -75,9 +78,12 @@ CLDR_DISAGREES = {
     #         https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476
     #       - CLDR, and practice reporting (incl. reports of a 2006 shift from a
     #         one-day to a two-day weekend) => FRIDAY-SATURDAY.
-    #     Left UN-OVERRIDDEN pending an orchestrator decision: the primary source
-    #     does not confirm the Friday-Saturday value CLDR gives, so overriding to
-    #     it would be substituting one unverified answer for another.
+    #     RESOLVED: Libya IS overridden by this package to Friday-Saturday. The
+    #     primary (legal) source says Friday-only and CLDR/practice say
+    #     Friday-Saturday, but NEITHER says Saturday-Sunday, so the inherited
+    #     default could not stand. We follow practice because "is this a working
+    #     day for business purposes" is a practice question; the legal reading
+    #     stays reachable via weekend_override. See _WEEKEND_CORRECTIONS.
     # IN: CLDR gives India's official Sunday-only week; Saturday-Sunday is the
     #     common corporate five-day week. Both describe something real.
     "AF": ([FRI, SAT], [THU, FRI], "contested; Afghanistan has shifted over time"),
@@ -99,8 +105,15 @@ def test_libya_and_india_inherit_an_unset_upstream_default():
     import inspect, importlib, re
 
     def declares_weekend(module_name):
-        src = inspect.getsource(importlib.import_module(f"holidays.countries.{module_name}"))
-        return any(re.match(r"\s*weekend\s*=", line) for line in src.splitlines())
+        # Assert on the CLASS ATTRIBUTE, not on source text: a regex over source
+        # misses an annotated assignment (`weekend: set[int] = {...}`), a value
+        # set on a mixin, or a property — and a silent miss here would let this
+        # tripwire keep passing while our override masked an upstream fix.
+        mod = importlib.import_module(f"holidays.countries.{module_name}")
+        cls = getattr(mod, module_name.title().replace("_", ""), None) or next(
+            v for k, v in vars(mod).items()
+            if isinstance(v, type) and getattr(v, "country", None))
+        return "weekend" in vars(cls)
 
     for mod in ("israel", "egypt", "saudi_arabia", "iran", "bangladesh"):
         assert declares_weekend(mod), f"{mod} used to declare a weekend explicitly"
