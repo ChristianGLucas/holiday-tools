@@ -3,33 +3,31 @@ version: 0.1.0
 language: python
 description: >-
   Offline public-holiday calendars and business-day arithmetic for 250 countries
-  (with US states, German Laender, Canadian provinces and other subdivisions) and
-  21 financial-market calendars, wrapping the MIT-licensed `holidays` library.
+  (US states, German Laender, Canadian provinces and other subdivisions) and 21
+  financial-market calendars, wrapping the MIT-licensed `holidays` library.
   ADVANCE or REWIND N business days, COUNT those between two dates, LIST them
   with a reason for each day skipped, and ROLL a date onto a business day under
-  the FOLLOWING / PRECEDING / MODIFIED conventions. Fully OFFLINE and
-  DETERMINISTIC - no network, no rate limit, no outage - so it is safe inside a
-  pure-tools flow. Deliberate contrast with
-  christiangeorgelucas/nager-date-connector, which fetches holiday data live
-  from date.nager.at: use that one as the authoritative source for current data,
-  this one when the computation must not fail because a website is down. And
-  unlike a spreadsheet's WORKDAY/NETWORKDAYS (via
-  christiangeorgelucas/spreadsheet-formula-tools), every node here KNOWS the
-  holidays: three business days after 2026-07-02 in the US is 2026-07-08, not
-  the 2026-07-07 a weekend-only calculation gives, because Independence Day is
-  observed on Friday 2026-07-03. The weekend is country-correct rather than
-  assumed - Friday/Saturday for Israel, Egypt, Saudi Arabia, Jordan and Qatar,
-  Friday alone for Iran, all cross-checked against CLDR - and overridable per
-  request, the remedy for the few countries (India, Libya) where authoritative
-  sources genuinely disagree. An observed substitute date is
-  explicitly flagged, never conflated with a real one; calendars that RELOCATE a
-  holiday instead of duplicating it (Netherlands, Israel, Chile) are handled,
-  and ACTUAL_ONLY returns the real date either way. Every node is CLOCK-FREE:
-  the caller supplies the date, so results reproduce across runs and machines.
-  An unknown subdivision, an unsupported language, or an out-of-coverage year
-  each return a typed error instead of silently falling back to the national
-  calendar or to an empty list. Caller-supplied extra closures (a company
-  shutdown) layer on top.
+  the FOLLOWING / PRECEDING / MODIFIED conventions. OFFLINE and DETERMINISTIC -
+  no network, no rate limit, no outage - so it is safe inside a pure-tools flow.
+  Deliberate contrast with christiangeorgelucas/nager-date-connector, which
+  fetches the same data live from date.nager.at: use that one as the
+  authoritative source for current data, this one when the computation must not
+  fail because a website is down. And unlike a spreadsheet's WORKDAY/NETWORKDAYS
+  (via christiangeorgelucas/spreadsheet-formula-tools), every node here KNOWS the
+  holidays: three business days after 2026-07-02 in the US is 2026-07-08, not the
+  2026-07-07 a weekend-only calculation gives, because Independence Day is
+  observed on Friday 2026-07-03. Weekends are country-correct and CLDR-checked
+  (Friday/Saturday for Israel, Egypt, Saudi Arabia, Jordan, Qatar; Friday alone
+  for Iran) and overridable per request. LIBYA is a deliberate documented
+  correction: the library sets no weekend for it and falls back to
+  Saturday/Sunday, which no source supports, so this returns Friday/Saturday per
+  CLDR and practice; the stricter Friday-only legal reading stays reachable via
+  weekend_override. An observed substitute date is flagged, never conflated with
+  a real one; calendars that RELOCATE rather than duplicate a holiday
+  (Netherlands, Israel, Chile) are handled, and ACTUAL_ONLY gives the real date.
+  Every node is CLOCK-FREE: the caller supplies the date, so results reproduce
+  across runs and machines. An unknown subdivision, unsupported language, or
+  out-of-coverage year each return a typed error rather than a silent fallback.
 nodes:
     - name: IsHoliday
       input: DateQuery

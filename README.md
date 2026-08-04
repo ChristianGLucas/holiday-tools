@@ -111,14 +111,32 @@ language rather than the container's locale, for the same reason.
 
   These weekends are **cross-checked against CLDR** (an independent source, via
   `locale-tools/DescribeLocale`) — 22 countries verified agreeing. The check also
-  found **7 countries where the two sources genuinely disagree**, and inspection
-  says *both* sources are wrong in different places: this package is right for
-  Bangladesh, Djibouti, the Maldives and Brunei; CLDR is right for Libya;
-  Afghanistan and India are legitimately contested (India's *official* week rests
-  Sunday only, while a five-day corporate week is common). Every one of them is
+  found **7 countries where the two sources disagree**, and *both* are wrong in
+  different places: this package is right for Bangladesh, Djibouti, the Maldives
+  and Brunei, while Afghanistan and India are legitimately contested. Every one is
   pinned by a regression test so a library upgrade cannot change a weekend
   silently. **If you need certainty for a contested country, pass
   `weekend_override` and the answer becomes yours, not the library's.**
+
+- **Libya is a deliberate, documented correction to the upstream library.** The
+  `holidays` library declares no weekend for Libya (nor for India) and silently
+  inherits its Saturday/Sunday default — an *absence* rendering as a confident
+  answer. For Libya that default is supported by **no source at all**, so this
+  package overrides it. The two authorities that do speak disagree:
+
+  | Source | Libyan weekend |
+  |---|---|
+  | ILO NATLEX, [Ministerial Order No. 10 of 2012](https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476) — working days Sat–Thu | **Friday only** |
+  | CLDR + practice reporting (and a reported 2006 shift to a two-day weekend) | **Friday–Saturday** |
+
+  **This package returns Friday–Saturday**, because *"is this a working day for
+  business purposes"* is a question about observed practice rather than the legal
+  status of public administration. If you need the strict legal reading, pass
+  `weekend_override: ["FRIDAY"]` and you get it deterministically.
+
+  India is deliberately **not** corrected: it inherits the same unset default, but
+  there Saturday/Sunday genuinely matches the common corporate five-day week, so
+  it is a defensible answer rather than an unsupported one.
 - **Observed vs. actual dates.** A holiday falling on a weekend is often
   observed on an adjacent weekday. Every occurrence is explicitly flagged
   `observed`, determined by comparing calendars rather than parsing the name —

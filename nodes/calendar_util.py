@@ -70,6 +70,53 @@ _MAX_CLOSEST_SCAN_DAYS = 800
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Documented corrections to the wrapped library's weekend data
+# ---------------------------------------------------------------------------
+#
+# The wrapped library sets `weekend` explicitly on most calendars (Israel, Egypt,
+# Saudi Arabia, Iran, Bangladesh all declare their own). A few declare NOTHING and
+# silently inherit HolidayBase's Saturday/Sunday default — so the value is an
+# absence rendering as a confident answer, not a considered position.
+#
+# LIBYA (LY) is the one case where that inherited Saturday/Sunday is supported by
+# NO source at all, so this package overrides it. The two authorities that do
+# speak disagree with each other, and we deliberately follow the second:
+#
+#   * ILO NATLEX, Ministerial Order No. 10 of 2012 — official working days are
+#     SATURDAY to THURSDAY, with FRIDAY the weekly rest day, i.e. a ONE-DAY
+#     (Friday-only) weekend.
+#     https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476
+#   * CLDR (Unicode, via Babel) and practice reporting — FRIDAY and SATURDAY,
+#     consistent with reports of a 2006 shift from a one-day to a two-day
+#     weekend and with neighbouring calendars.
+#
+# WE CHOOSE FRIDAY-SATURDAY, deliberately, because of what this package is asked:
+# "is this a working day for business purposes" is a question about OBSERVED
+# PRACTICE, not about the legal status of public administration (which is the
+# likely scope of the 2012 order). A business-day calculator should follow
+# business practice and DISCLOSE the legal divergence, not the reverse.
+#
+# A caller who needs the strict legal reading gets it deterministically with
+# CalendarSpec.weekend_override = [FRIDAY]. This is stated in the package
+# description so it is discoverable without reading this source.
+#
+# INDIA (IN) is deliberately NOT corrected: it inherits the same unset default,
+# but there Saturday/Sunday genuinely matches the common corporate five-day week,
+# so it is a defensible answer rather than an unsupported one. It stays documented
+# as contested (CLDR gives the official Sunday-only week) and pinned by test.
+#
+# Python weekday ints: Monday=0 .. Sunday=6.
+_WEEKEND_CORRECTIONS = {
+    "LY": {4, 5},  # Friday, Saturday
+}
+
+
+def corrected_weekend(entry, library_weekend):
+    """Apply this package's documented weekend corrections to a library value."""
+    return set(_WEEKEND_CORRECTIONS.get(entry["code"], library_weekend))
+
+
 def _pretty(class_name: str) -> str:
     """'NewYorkStockExchange' -> 'New York Stock Exchange'.
 
@@ -561,7 +608,7 @@ def resolve(spec) -> ResolvedCalendar:
     if override:
         weekend = {weekday_enum_to_index(v, "weekend_override") for v in override}
     else:
-        weekend = set(getattr(probe, "weekend", {5, 6}))
+        weekend = corrected_weekend(entry, getattr(probe, "weekend", {5, 6}))
 
     extras = {}
     for item in getattr(spec, "extra_holidays", []) or []:
@@ -602,7 +649,9 @@ def _default_category(cls):
 def default_weekend(entry, subdiv=""):
     cls = entity_class(entry)
     cal = _make_calendar(entry, subdiv, _default_category(cls), effective_language(cls, ""), True)
-    return sorted(int(w) + 1 for w in getattr(cal, "weekend", {5, 6}))
+    # Same documented corrections the query path applies, so CalendarInfo can
+    # never advertise a weekend the other nodes do not actually use.
+    return sorted(int(w) + 1 for w in corrected_weekend(entry, getattr(cal, "weekend", {5, 6})))
 
 
 def check_range(start: date, end: date) -> None:

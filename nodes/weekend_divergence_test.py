@@ -80,9 +80,6 @@ CLDR_DISAGREES = {
     #     it would be substituting one unverified answer for another.
     # IN: CLDR gives India's official Sunday-only week; Saturday-Sunday is the
     #     common corporate five-day week. Both describe something real.
-    "LY": ([SAT, SUN], [FRI, SAT], "NEITHER — Sat-Sun is an unset library "
-                                   "default; law says Fri-only, CLDR/practice "
-                                   "say Fri-Sat. Escalated, not overridden."),
     "AF": ([FRI, SAT], [THU, FRI], "contested; Afghanistan has shifted over time"),
     "IN": ([SAT, SUN], [SUN], "contested; CLDR gives the official Sunday-only "
                               "week, ours the common corporate five-day week; "
@@ -123,6 +120,52 @@ def test_known_cldr_divergences_are_pinned_not_drifting():
         assert _weekend(country) == ours, (
             f"{country}: weekend changed from the pinned value {ours}. "
             "Re-check against CLDR before accepting the new value.")
+
+
+def test_libya_is_a_deliberate_documented_override_of_upstream():
+    """LY is this package's ONE weekend correction to the wrapped library.
+
+    Upstream declares no weekend for Libya and inherits HolidayBase's
+    Saturday/Sunday — a value supported by NO source: the ILO NATLEX record for
+    Ministerial Order No. 10 of 2012 gives a Friday-only rest day, and CLDR plus
+    practice give Friday-Saturday. Neither says Saturday-Sunday.
+
+    We ship Friday-Saturday, because "is this a working day for business
+    purposes" is a question about observed practice rather than about the legal
+    status of public administration. The strict legal reading stays reachable
+    via weekend_override, which is asserted below and stated in the package
+    description.
+    """
+    assert _weekend("LY") == [FRI, SAT], "Libya must not regress to the inherited Sat-Sun"
+
+    # Friday 2026-07-10 is a rest day under our value; Sunday 2026-07-12 works.
+    from gen.messages_pb2 import CalendarSpec, DateQuery
+    from nodes.is_business_day import is_business_day
+    friday = is_business_day(
+        _Ctx(), DateQuery(calendar=CalendarSpec(country="LY"), date="2026-07-10"))
+    sunday = is_business_day(
+        _Ctx(), DateQuery(calendar=CalendarSpec(country="LY"), date="2026-07-12"))
+    assert friday.ok and friday.is_business_day is False and friday.reason == 2
+    assert sunday.ok and sunday.is_business_day is True
+
+    # The STRICT LEGAL reading (Friday-only) remains reachable and deterministic:
+    # under it, Saturday 2026-07-11 is a working day.
+    legal = is_business_day(
+        _Ctx(), DateQuery(
+            calendar=CalendarSpec(country="LY", weekend_override=[Weekday.FRIDAY]),
+            date="2026-07-11"))
+    assert legal.ok and legal.is_business_day is True
+
+
+def test_the_libya_override_does_not_leak_to_other_calendars():
+    """A correction table is a liability if it is too broad. Only LY moves."""
+    assert _weekend("IN") == [SAT, SUN], "India is deliberately NOT corrected"
+    assert _weekend("IL") == [FRI, SAT]
+    assert _weekend("US") == [SAT, SUN]
+    assert _weekend("IR") == [FRI]
+    from nodes import calendar_util as cu
+    assert set(cu._WEEKEND_CORRECTIONS) == {"LY"}, (
+        "a new weekend correction was added without updating these tests")
 
 
 def test_weekend_override_is_the_remedy_for_a_contested_country():
