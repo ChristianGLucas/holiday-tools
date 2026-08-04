@@ -1,0 +1,518 @@
+// Data contracts for christiangeorgelucas/holiday-tools.
+//
+// Every date in this package is an ISO 8601 calendar date string, "YYYY-MM-DD",
+// with no time and no timezone. No node ever reads the wall clock: every
+// date-relative answer is derived only from dates the caller supplies.
+
+syntax = "proto3";
+
+package christiangeorgelucas.holiday_tools;
+
+// A day of the week, named rather than numbered so there is no ambiguity about
+// whether counting starts at Sunday, Monday, zero, or one.
+enum Weekday {
+  // Never returned by a successful call; present only as the proto3 default.
+  WEEKDAY_UNSPECIFIED = 0;
+  MONDAY = 1;
+  TUESDAY = 2;
+  WEDNESDAY = 3;
+  THURSDAY = 4;
+  FRIDAY = 5;
+  SATURDAY = 6;
+  SUNDAY = 7;
+}
+
+// Whether a calendar includes the substitute ("observed") weekday a holiday is
+// moved to when it falls on a weekend or another holiday.
+enum ObservedRule {
+  // Treated exactly as INCLUDE_OBSERVED — the default, so an omitted field
+  // gives the same answer a national calendar would print.
+  OBSERVED_RULE_UNSPECIFIED = 0;
+  // Include BOTH the actual date and any substitute date it is observed on.
+  // Each returned occurrence is tagged via HolidayOccurrence.observed, so a
+  // caller can tell the two apart. Business-day arithmetic treats both as
+  // non-working days, which is what actually closes an office or a market.
+  INCLUDE_OBSERVED = 1;
+  // Include ONLY each holiday's actual calendar date, never a substitute
+  // weekday. Use this to ask "when does the holiday really fall?" rather than
+  // "when is the office shut?".
+  ACTUAL_ONLY = 2;
+}
+
+// How to adjust a date that is not a business day onto one that is. These are
+// the standard financial date-roll conventions.
+enum BusinessDayConvention {
+  // Treated exactly as FOLLOWING — the most common default.
+  CONVENTION_UNSPECIFIED = 0;
+  // Move forward to the next business day.
+  FOLLOWING = 1;
+  // Move backward to the previous business day.
+  PRECEDING = 2;
+  // Move forward to the next business day, unless that would cross into the
+  // next calendar month, in which case move backward instead.
+  MODIFIED_FOLLOWING = 3;
+  // Move backward to the previous business day, unless that would cross into
+  // the previous calendar month, in which case move forward instead.
+  MODIFIED_PRECEDING = 4;
+}
+
+// Why a given date is or is not a business day.
+enum NonBusinessReason {
+  // Never returned by a successful call; present only as the proto3 default.
+  NON_BUSINESS_REASON_UNSPECIFIED = 0;
+  // The date is a normal working day on this calendar.
+  BUSINESS_DAY = 1;
+  // The date falls on this calendar's weekend, which is NOT universally
+  // Saturday/Sunday — much of the Middle East uses Friday/Saturday.
+  WEEKEND = 2;
+  // The date is a holiday on this calendar (or a substitute observed date,
+  // when the calendar includes them).
+  HOLIDAY = 3;
+  // The date is both a weekend day AND a holiday.
+  WEEKEND_AND_HOLIDAY = 4;
+}
+
+// Which way to search from a starting date.
+enum SearchDirection {
+  // Treated exactly as FORWARD.
+  SEARCH_DIRECTION_UNSPECIFIED = 0;
+  // Search later in time, strictly after the starting date.
+  FORWARD = 1;
+  // Search earlier in time, strictly before the starting date.
+  BACKWARD = 2;
+}
+
+// A structured, deterministic failure. Every output message carries one; its
+// code is empty on success. Nodes never raise or crash on bad input — they
+// return this instead.
+message Error {
+  // Stable machine-readable code:
+  //   INVALID_CALENDAR_SPEC — neither country nor market was given, or both were.
+  //   UNKNOWN_COUNTRY       — the country code is not in this package's calendar data.
+  //   UNKNOWN_MARKET        — the market code is not in this package's calendar data.
+  //   UNKNOWN_SUBDIVISION   — the calendar exists but has no such subdivision. Never
+  //                           silently falls back to the national calendar.
+  //   UNSUPPORTED_LANGUAGE  — the calendar does not publish holiday names in that language.
+  //   UNSUPPORTED_CATEGORY  — the calendar does not define that holiday category.
+  //   INVALID_DATE          — a date is not a valid ISO 8601 "YYYY-MM-DD" calendar date.
+  //   INVALID_DATE_RANGE    — end_date precedes start_date.
+  //   YEAR_OUT_OF_RANGE     — a date, year, or computed result falls outside the years
+  //                           this calendar actually covers. Returned instead of a
+  //                           silently empty holiday list.
+  //   INVALID_ARGUMENT      — some other field is missing, malformed, or out of range.
+  //   INTERNAL              — this package itself faulted; the caller's input may be fine.
+  string code = 1;
+  // Human-readable detail naming exactly what was rejected and why, including
+  // the valid range or the supported values when that is what went wrong.
+  string message = 2;
+}
+
+// An extra, caller-supplied non-working day layered on top of a published
+// calendar — a company shutdown, a local strike, a one-off closure.
+message ExtraHoliday {
+  // The ISO 8601 date, "YYYY-MM-DD".
+  string date = 1;
+  // A label for the day, echoed back on any occurrence returned for this date.
+  // Optional; defaults to "Custom holiday" when empty.
+  string name = 2;
+}
+
+// Selects WHICH calendar to answer against. Every calendar-aware node takes
+// exactly one of these. Supply exactly one of country or market.
+message CalendarSpec {
+  // ISO 3166-1 alpha-2 country code, e.g. "US", "DE", "IL". Mutually exclusive
+  // with market; exactly one of the two is required. Call SupportedCalendars
+  // for the full list of accepted codes.
+  string country = 1;
+  // Financial-market calendar code, e.g. "NYSE" (New York Stock Exchange) or
+  // "ECB" (European Central Bank). A market's trading holidays differ from its
+  // host country's public holidays. Mutually exclusive with country.
+  string market = 2;
+  // Optional subdivision code within the calendar — a US state ("TX"), a German
+  // Land ("BY"), a Canadian province ("QC"). Subdivisions genuinely differ from
+  // the national calendar. An unrecognized value is an UNKNOWN_SUBDIVISION
+  // error, never a silent fallback to the national calendar. Call CalendarInfo
+  // for a calendar's accepted subdivision codes and their aliases.
+  string subdivision = 3;
+  // Optional language for the returned holiday NAMES, e.g. "de" to get
+  // "Karfreitag" instead of "Good Friday". Affects names only, never dates. An
+  // unsupported language is an UNSUPPORTED_LANGUAGE error rather than a silent
+  // fallback to the default language. Call CalendarInfo for supported codes.
+  string language = 4;
+  // Optional holiday categories to include, e.g. "public", "bank", "school",
+  // "government", "optional", "half_day", "unofficial". Defaults to the
+  // calendar's own default category (normally "public") when empty. Call
+  // CalendarInfo for the categories a calendar actually defines.
+  repeated string categories = 5;
+  // Whether substitute observed dates are included. Defaults to
+  // INCLUDE_OBSERVED, which is what closes an office.
+  ObservedRule observed_rule = 6;
+  // Optional override of which weekdays are the weekend. Empty means use the
+  // calendar's own real weekend, which is already country-correct (Friday and
+  // Saturday for Israel, Egypt, Saudi Arabia; Friday alone for Iran; Saturday
+  // and Sunday for most of the West). Set this only to model a specific
+  // organization's working week, e.g. a six-day operation that rests only on
+  // Sunday. An explicitly empty weekend is not expressible; omit the field for
+  // the calendar default.
+  repeated Weekday weekend_override = 7;
+  // Optional extra non-working days layered on top of the published calendar —
+  // company shutdowns and other one-off closures. These count as holidays for
+  // every node in this package.
+  repeated ExtraHoliday extra_holidays = 8;
+}
+
+// One holiday falling on one date.
+message HolidayOccurrence {
+  // The ISO 8601 date this occurrence falls on, "YYYY-MM-DD".
+  string date = 1;
+  // The holiday's name, in the calendar's default language unless
+  // CalendarSpec.language asked for another.
+  string name = 2;
+  // True when this is a SUBSTITUTE date the holiday is observed on because its
+  // actual date fell on a weekend or another holiday — the classic
+  // "Independence Day (observed)" Friday. False when this is the holiday's
+  // actual calendar date. Determined by comparing the calendar with and without
+  // observed substitution, not by parsing the name, so it is language-safe.
+  bool observed = 3;
+  // The category this occurrence belongs to, e.g. "public" or "bank". Set to
+  // "custom" for a caller-supplied CalendarSpec.extra_holidays entry.
+  string category = 4;
+  // The day of the week this occurrence falls on.
+  Weekday weekday = 5;
+}
+
+// Asks a question about a single date on a single calendar.
+message DateQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // The date being asked about, ISO 8601 "YYYY-MM-DD". Always caller-supplied;
+  // this package never substitutes the current date.
+  string date = 2;
+}
+
+// Asks a question about a closed date range on a single calendar.
+message RangeQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // First date of the range, ISO 8601 "YYYY-MM-DD". INCLUSIVE.
+  string start_date = 2;
+  // Last date of the range, ISO 8601 "YYYY-MM-DD". INCLUSIVE — a range whose
+  // start and end are the same single business day counts as 1, not 0. Must not
+  // precede start_date.
+  string end_date = 3;
+}
+
+// Whether a date is a holiday, and which holidays land on it.
+message HolidayStatus {
+  // False when the request was rejected; see error. Every other field is at its
+  // zero value when this is false.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // The date that was asked about, echoed back as ISO 8601 "YYYY-MM-DD".
+  string date = 3;
+  // True when at least one holiday falls on this date.
+  bool is_holiday = 4;
+  // Every holiday falling on this date — usually zero or one, occasionally more
+  // when two holidays coincide.
+  repeated HolidayOccurrence holidays = 5;
+  // True when this date falls on the calendar's weekend, which is not
+  // universally Saturday/Sunday.
+  bool is_weekend = 6;
+  // True when this date is a normal working day: neither a weekend day nor a
+  // holiday on this calendar.
+  bool is_business_day = 7;
+  // The day of the week this date falls on.
+  Weekday weekday = 8;
+}
+
+// A list of holidays, with the window they were drawn from.
+message HolidayList {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // Every matching holiday, sorted by date ascending, then by name.
+  repeated HolidayOccurrence holidays = 3;
+  // How many occurrences are in holidays.
+  int32 count = 4;
+  // First date of the window actually searched, ISO 8601 "YYYY-MM-DD".
+  string window_start = 5;
+  // Last date of the window actually searched, ISO 8601 "YYYY-MM-DD", inclusive.
+  string window_end = 6;
+}
+
+// Asks for every holiday in one calendar year.
+message YearQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // The calendar year, e.g. 2026. A year outside the range this calendar covers
+  // is a YEAR_OUT_OF_RANGE error rather than a silently empty list.
+  int32 year = 2;
+}
+
+// Looks up holidays by name rather than by date.
+message NameQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // The holiday name to look for, e.g. "Thanksgiving". Matching is
+  // case-insensitive and matches any name CONTAINING this text, so "Christmas"
+  // finds both "Christmas Day" and "Christmas Eve".
+  string name = 2;
+  // First calendar year to search, inclusive. Required.
+  int32 start_year = 3;
+  // Last calendar year to search, inclusive. Required, and must not precede
+  // start_year.
+  int32 end_year = 4;
+}
+
+// Asks for the nearest holiday to a date.
+message ClosestQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // The date to search from, ISO 8601 "YYYY-MM-DD". The search is STRICT: a
+  // holiday falling on this exact date is not returned.
+  string date = 2;
+  // Which way to search. Defaults to FORWARD.
+  SearchDirection direction = 3;
+}
+
+// The nearest holiday found in the requested direction.
+message ClosestHolidayResult {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // True when a holiday was found within the years this calendar covers. False
+  // (with ok still true) when the search ran off the end of the calendar's
+  // coverage without finding one.
+  bool found = 3;
+  // The holiday found. Unset when found is false.
+  HolidayOccurrence holiday = 4;
+  // How many calendar days separate the queried date from the holiday, always
+  // positive. Zero when found is false.
+  int32 days_away = 5;
+}
+
+// Whether a date is a working day, and if not, why not.
+message BusinessDayStatus {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // The date that was asked about, echoed back as ISO 8601 "YYYY-MM-DD".
+  string date = 3;
+  // True when this date is a normal working day on this calendar.
+  bool is_business_day = 4;
+  // Why it is or is not a business day — BUSINESS_DAY, WEEKEND, HOLIDAY, or
+  // WEEKEND_AND_HOLIDAY.
+  NonBusinessReason reason = 5;
+  // The day of the week this date falls on.
+  Weekday weekday = 6;
+  // The holidays landing on this date, if any. Empty when the date is not a
+  // holiday.
+  repeated HolidayOccurrence holidays = 7;
+}
+
+// Moves a date by a whole number of business days.
+message AddBusinessDaysQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // The date to count from, ISO 8601 "YYYY-MM-DD".
+  string start_date = 2;
+  // How many business days to move. POSITIVE counts forward, NEGATIVE counts
+  // backward, and ZERO does not move at all when start_date is already a
+  // business day — but see AddBusinessDays' own documentation for what zero
+  // means when start_date is NOT a business day.
+  int32 days = 3;
+}
+
+// Rolls a date onto a business day under a named convention.
+message RollQuery {
+  // Which calendar to answer against.
+  CalendarSpec calendar = 1;
+  // The date to roll, ISO 8601 "YYYY-MM-DD". A date that is already a business
+  // day is returned unchanged by every convention.
+  string date = 2;
+  // Which direction to roll, and whether to respect the month boundary.
+  // Defaults to FOLLOWING.
+  BusinessDayConvention convention = 3;
+}
+
+// A single resulting business day.
+message BusinessDayResult {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // The resulting business day, ISO 8601 "YYYY-MM-DD". Guaranteed to be a
+  // business day on this calendar whenever ok is true.
+  string date = 3;
+  // The date the computation started from, echoed back as ISO 8601
+  // "YYYY-MM-DD".
+  string start_date = 4;
+  // How many calendar days separate start_date from date. Negative when the
+  // result precedes the start.
+  int32 calendar_days_moved = 5;
+  // The day of the week the result falls on.
+  Weekday weekday = 6;
+  // True when start_date was already a business day and the result is
+  // unchanged.
+  bool unchanged = 7;
+}
+
+// How many business days a range contains.
+message BusinessDayCount {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // Business days in the range, counting BOTH endpoints. A range of one single
+  // business day counts 1.
+  int32 business_days = 3;
+  // Every day in the range, counting both endpoints, business or not.
+  int32 calendar_days = 4;
+  // Days in the range that fall on this calendar's weekend, whether or not they
+  // are also holidays.
+  int32 weekend_days = 5;
+  // Days in the range that are holidays AND are not already weekend days — the
+  // working days actually lost to holidays, so business_days plus weekend_days
+  // plus holiday_days always equals calendar_days.
+  int32 holiday_days = 6;
+  // First date of the counted range, ISO 8601 "YYYY-MM-DD", inclusive.
+  string window_start = 7;
+  // Last date of the counted range, ISO 8601 "YYYY-MM-DD", inclusive.
+  string window_end = 8;
+}
+
+// One non-working day inside a range, with the reason it does not count.
+message NonBusinessDay {
+  // The ISO 8601 date, "YYYY-MM-DD".
+  string date = 1;
+  // Why this day does not count as a business day.
+  NonBusinessReason reason = 2;
+  // The day of the week.
+  Weekday weekday = 3;
+  // The holidays landing on this date, if any.
+  repeated HolidayOccurrence holidays = 4;
+}
+
+// Every business day in a range, and every day that was skipped.
+message BusinessDayList {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // Every business day in the range, ascending, counting both endpoints, as ISO
+  // 8601 "YYYY-MM-DD" strings.
+  repeated string business_days = 3;
+  // Every non-working day in the range, ascending, each with the reason it was
+  // skipped — the audit trail explaining the business_days count.
+  repeated NonBusinessDay non_business_days = 4;
+  // How many entries are in business_days.
+  int32 business_day_count = 5;
+  // First date of the range, ISO 8601 "YYYY-MM-DD", inclusive.
+  string window_start = 6;
+  // Last date of the range, ISO 8601 "YYYY-MM-DD", inclusive.
+  string window_end = 7;
+}
+
+// Filters the catalog of calendars this package can answer against.
+message CalendarCatalogQuery {
+  // Optional filter: "country" for national calendars, "market" for
+  // financial-market calendars, or empty/"all" for both.
+  string kind = 1;
+  // Optional case-insensitive filter — returns only calendars whose code or
+  // name contains this text. Empty returns everything.
+  string contains = 2;
+}
+
+// One calendar this package can answer against.
+message CalendarSummary {
+  // The code to pass as CalendarSpec.country or CalendarSpec.market.
+  string code = 1;
+  // The calendar's human-readable name, e.g. "United States".
+  string name = 2;
+  // "country" for a national calendar, "market" for a financial-market calendar
+  // — which CalendarSpec field this code belongs in.
+  string kind = 3;
+  // How many subdivisions this calendar defines. Zero means it has none and
+  // CalendarSpec.subdivision must be left empty.
+  int32 subdivision_count = 4;
+  // First calendar year this calendar has data for.
+  int32 start_year = 5;
+  // Last calendar year this calendar has data for.
+  int32 end_year = 6;
+  // Other codes accepted for this same calendar, e.g. "NYSE" and
+  // "NewYorkStockExchange" alongside the "XNYS" MIC. Any of these works
+  // wherever code does.
+  repeated string aliases = 7;
+}
+
+// The catalog of calendars available.
+message CalendarCatalog {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // Every matching calendar, sorted by kind then code.
+  repeated CalendarSummary calendars = 3;
+  // How many calendars are in calendars.
+  int32 count = 4;
+}
+
+// Asks for the full detail of one calendar.
+message CalendarInfoQuery {
+  // ISO 3166-1 alpha-2 country code. Mutually exclusive with market; exactly
+  // one of the two is required.
+  string country = 1;
+  // Financial-market calendar code. Mutually exclusive with country.
+  string market = 2;
+}
+
+// One subdivision of a calendar.
+message Subdivision {
+  // The code to pass as CalendarSpec.subdivision, e.g. "TX" or "BY".
+  string code = 1;
+  // Other names this package also accepts for the same subdivision, e.g.
+  // "Texas" for "TX". Any of these works as CalendarSpec.subdivision.
+  repeated string aliases = 2;
+}
+
+// Everything this package knows about one calendar's shape.
+message CalendarDetail {
+  // False when the request was rejected; see error.
+  bool ok = 1;
+  // Set when ok is false.
+  Error error = 2;
+  // The calendar's code.
+  string code = 3;
+  // The calendar's human-readable name.
+  string name = 4;
+  // "country" or "market".
+  string kind = 5;
+  // The weekdays this calendar treats as its weekend — NOT universally Saturday
+  // and Sunday. Override per request with CalendarSpec.weekend_override.
+  repeated Weekday weekend = 6;
+  // First calendar year with data. A request outside [start_year, end_year] is
+  // a YEAR_OUT_OF_RANGE error.
+  int32 start_year = 7;
+  // Last calendar year with data.
+  int32 end_year = 8;
+  // Every subdivision this calendar defines, with the aliases each accepts.
+  // Empty when the calendar has no subdivisions.
+  repeated Subdivision subdivisions = 9;
+  // Holiday categories this calendar defines — the accepted values for
+  // CalendarSpec.categories.
+  repeated string supported_categories = 10;
+  // The category used when CalendarSpec.categories is left empty.
+  string default_category = 11;
+  // Language codes this calendar publishes holiday names in — the accepted
+  // values for CalendarSpec.language.
+  repeated string supported_languages = 12;
+  // The language used when CalendarSpec.language is left empty.
+  string default_language = 13;
+  // Other codes accepted for this same calendar, e.g. "NYSE" alongside the
+  // "XNYS" MIC. Any of these works wherever code does.
+  repeated string aliases = 14;
+}

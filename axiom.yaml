@@ -1,0 +1,179 @@
+name: christiangeorgelucas/holiday-tools
+version: 0.1.0
+language: python
+description: >-
+  Offline public-holiday calendars and business-day arithmetic for 250 countries
+  (with US states, German Laender, Canadian provinces and other subdivisions) and
+  21 financial-market calendars, wrapping the MIT-licensed `holidays` library.
+  Answers both halves of "what is the next working day?": which dates are
+  holidays, and how to count and move across them. ADVANCE or REWIND N business
+  days, COUNT the business days between two dates, LIST them with a reason for
+  every day skipped, and ROLL a date onto a business day under the standard
+  FOLLOWING / PRECEDING / MODIFIED financial conventions. Fully OFFLINE and
+  DETERMINISTIC - no network call, no rate limit, no outage - so it is safe
+  inside a pure-tools flow. That is the deliberate contrast with
+  christiangeorgelucas/nager-date-connector, which fetches holiday data live
+  from date.nager.at: use that one for the authoritative upstream source, this
+  one when the computation must not fail because a website is down. And unlike a
+  spreadsheet's WORKDAY/NETWORKDAYS (via
+  christiangeorgelucas/spreadsheet-formula-tools), every node here KNOWS the
+  holidays: three business days after 2026-07-02 in the US is 2026-07-08, not
+  the 2026-07-07 a weekend-only calculation returns, because Independence Day is
+  observed on Friday 2026-07-03. The weekend is country-correct rather than
+  assumed - Friday/Saturday for Israel, Egypt, Saudi Arabia, Jordan and Qatar,
+  Friday alone for Iran - and overridable per request. A holiday observed on a
+  substitute weekday is returned alongside its actual date and explicitly
+  flagged, so the two are never conflated. Every node is CLOCK-FREE: the caller
+  always supplies the date, so results are reproducible across runs and
+  machines. An unknown subdivision, an unsupported language, or a year outside
+  the calendar's real coverage each return a typed error instead of silently
+  falling back to the national calendar or to an empty list. Caller-supplied
+  extra closures (a company shutdown) layer on top.
+nodes:
+    - name: IsHoliday
+      input: DateQuery
+      output: HolidayStatus
+      description: >-
+        Report whether one caller-supplied date is a public holiday on a country
+        or financial-market calendar, naming every holiday that lands on it. Each
+        occurrence is flagged as the holiday's ACTUAL date or the substitute
+        weekday it is OBSERVED on when the real date falls on a weekend (the
+        classic "Independence Day (observed)" Friday), so the two are never
+        conflated. Also reports whether the date is a weekend day on that
+        calendar - Friday/Saturday in much of the Middle East, not universally
+        Saturday/Sunday - and whether it is therefore a working day. Optionally
+        scoped to a subdivision (US state, German Land, Canadian province) and to
+        a holiday language and category. Offline, deterministic, clock-free.
+    - name: IsBusinessDay
+      input: DateQuery
+      output: BusinessDayStatus
+      description: >-
+        Report whether one caller-supplied date is a working day, and when it is
+        not, say exactly WHY - BUSINESS_DAY, WEEKEND, HOLIDAY or
+        WEEKEND_AND_HOLIDAY - a distinction a bare boolean loses. Any holidays
+        landing on the date are returned alongside, so "the office is shut
+        because it is Saturday" and "the office is shut because it is Christmas"
+        are separable in one call. The weekend is the calendar's own real
+        weekend, overridable per request to model a specific organization's
+        working week. Offline, deterministic, clock-free.
+    - name: HolidaysInYear
+      input: YearQuery
+      output: HolidayList
+      description: >-
+        List every public holiday in one calendar year for a country (optionally
+        a subdivision) or a financial market. Subdivisions genuinely change the
+        answer - Bavaria observes Epiphany and Texas observes Texas Independence
+        Day, neither of which is a national holiday - and an unrecognized
+        subdivision is a typed UNKNOWN_SUBDIVISION error rather than a silent
+        fall back to the national calendar, which would be a wrong answer with no
+        signal. A year outside the calendar's real coverage returns a typed
+        YEAR_OUT_OF_RANGE error rather than a silently empty list, which would be
+        indistinguishable from a year that genuinely has no holidays.
+    - name: HolidaysInRange
+      input: RangeQuery
+      output: HolidayList
+      description: >-
+        List every public holiday falling inside a caller-supplied date range,
+        inclusive of both endpoints and free to span year boundaries. Use it when
+        the window that matters is a quarter, a sprint, a payment period or an
+        SLA window rather than a calendar year. Each occurrence is flagged as an
+        actual or an observed substitute date. A window that genuinely contains
+        no holidays is a successful empty result, not an error. Offline,
+        deterministic, clock-free.
+    - name: FindHolidayByName
+      input: NameQuery
+      output: HolidayList
+      description: >-
+        Find which DATES a named holiday falls on across a span of years - the
+        inverse of asking what falls on a date. Answers "when is Thanksgiving in
+        2026 and 2027?" for a moving feast whose date is a rule rather than a
+        fixed day: nth-weekday rules (US Thanksgiving is the fourth Thursday of
+        November) and Easter-derived dates (Good Friday, Easter Monday, Corpus
+        Christi), which are the classic off-by-one source. Matching is
+        case-insensitive and substring-based, so "Christmas" finds both
+        "Christmas Day" and "Christmas Eve". Actual and observed dates are both
+        returned and flagged.
+    - name: ClosestHoliday
+      input: ClosestQuery
+      output: ClosestHolidayResult
+      description: >-
+        Find the nearest public holiday before or after a caller-supplied date,
+        with how many calendar days away it is. The search is STRICT - a holiday
+        on the queried date itself is never returned - so this answers "what is
+        the next day off after this date?" and, searching BACKWARD, "when was the
+        last one?". Running past the end of the calendar's year coverage reports
+        found=false rather than erroring. Offline, deterministic, clock-free.
+    - name: AddBusinessDays
+      input: AddBusinessDaysQuery
+      output: BusinessDayResult
+      description: >-
+        Advance or rewind a date by a whole number of BUSINESS days, skipping
+        both this calendar's weekend and its public holidays. This is the
+        calculation a spreadsheet's WORKDAY cannot do on its own: WORKDAY knows
+        only weekends unless the caller hands it a holiday list, so three business
+        days after 2026-07-02 in the US is 2026-07-07 to a spreadsheet but
+        2026-07-08 here, because Independence Day is observed on Friday
+        2026-07-03. Positive days count forward, negative count backward, and
+        ZERO rolls forward to the nearest business day (inclusive), so the result
+        is always a business day. A result landing outside the calendar's year
+        coverage is a typed error. Clock-free.
+    - name: RollToBusinessDay
+      input: RollQuery
+      output: BusinessDayResult
+      description: >-
+        Adjust a date that is not a business day onto one that is, under a named
+        financial roll convention. FOLLOWING moves to the next business day,
+        PRECEDING to the previous, and the MODIFIED variants do the same but
+        reverse direction rather than cross a calendar-month boundary - the
+        convention that keeps a monthly payment inside its own month. A date that
+        is already a business day is returned unchanged by every convention. This
+        is the settlement-date adjustment invoice due dates, payment terms and
+        coupon schedules need, applied to any single date rather than only inside
+        a generated schedule. Clock-free.
+    - name: CountBusinessDays
+      input: RangeQuery
+      output: BusinessDayCount
+      description: >-
+        Count the working days between two caller-supplied dates, excluding
+        weekends AND public holidays, inclusive of both endpoints - so a range
+        covering one single working day counts 1. Alongside the count it returns
+        the full partition of the range (calendar days, weekend days, and the
+        working days actually lost to holidays) which always sums back to the
+        calendar-day total, making the answer auditable rather than a bare number
+        the caller has to trust. For SLA windows, turnaround times, payment terms
+        and accrual periods. Clock-free.
+    - name: BusinessDaysInRange
+      input: RangeQuery
+      output: BusinessDayList
+      description: >-
+        List every working day inside a caller-supplied date range, plus every
+        day that was skipped and the reason it was skipped. Where
+        CountBusinessDays returns the number, this returns the days themselves -
+        the dates to schedule work on, bill for, or iterate over - together with
+        an audit trail naming each skipped day as a WEEKEND, a HOLIDAY or both,
+        and the holidays responsible. That makes a surprising count explainable
+        instead of merely wrong-looking. Clock-free.
+    - name: SupportedCalendars
+      input: CalendarCatalogQuery
+      output: CalendarCatalog
+      description: >-
+        List every country and financial-market calendar this package can answer
+        against, with the exact code to pass to every other node, the aliases each
+        code accepts, how many subdivisions it defines, and the span of years it
+        actually has data for. Filter by kind ("country" or "market") or by a
+        case-insensitive substring of the code or name. This is the discovery node
+        an agent calls first to learn which codes are valid, instead of guessing
+        one and getting a typed error back.
+    - name: CalendarInfo
+      input: CalendarInfoQuery
+      output: CalendarDetail
+      description: >-
+        Describe one calendar's shape: which weekdays are its WEEKEND, which
+        subdivisions it defines (with the aliases each accepts, so "Texas" works
+        as well as "TX"), which holiday categories and languages it supports, and
+        which years it has data for. The weekend is the field that most often
+        surprises callers - Friday/Saturday for Israel, Egypt, Saudi Arabia,
+        Jordan and Qatar, Friday alone for Iran, Saturday/Sunday across most of
+        the West - so hard-coding Saturday/Sunday produces confidently wrong
+        answers for those locales. Call this before building a CalendarSpec so
+        every field is a value the calendar actually accepts.
