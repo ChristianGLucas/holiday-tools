@@ -109,10 +109,13 @@ language rather than the container's locale, for the same reason.
   Every calendar carries its own real weekend, and you can override it per
   request to model a specific organization's working week.
 - **Observed vs. actual dates.** A holiday falling on a weekend is often
-  observed on an adjacent weekday. Both are returned and each occurrence is
-  explicitly flagged `observed`, determined by comparing calendars rather than
-  parsing the name — so it stays correct in every language. Ask for
-  `ACTUAL_ONLY` if you want just the real dates.
+  observed on an adjacent weekday. Every occurrence is explicitly flagged
+  `observed`, determined by comparing calendars rather than parsing the name —
+  so it stays correct in every language. Calendars differ in policy: most *add*
+  the substitute and keep the actual date, so both come back; a minority (the
+  Netherlands, Israel, Chile, Colombia, Argentina…) *relocate* the holiday, so
+  only the substitute is a day off. Ask for `ACTUAL_ONLY` to get the real
+  calendar date either way.
 - **Subdivisions genuinely differ.** Bavaria observes Epiphany; the German
   national calendar does not. Texas observes Texas Independence Day; the US
   federal calendar does not. An unrecognized subdivision is a typed
@@ -213,7 +216,7 @@ Both licences were verified from the `LICENSE` file in the actual distribution.
 ```bash
 axiom validate --json   # static checks
 axiom test              # 104 tests, including an independent-oracle suite
-axiom dev               # local server on :8083
+axiom dev               # local server (port is printed on startup)
 ```
 
 The test suite checks holiday dates against **independent ground truth** rather

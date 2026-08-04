@@ -28,10 +28,16 @@ enum ObservedRule {
   // Treated exactly as INCLUDE_OBSERVED — the default, so an omitted field
   // gives the same answer a national calendar would print.
   OBSERVED_RULE_UNSPECIFIED = 0;
-  // Include BOTH the actual date and any substitute date it is observed on.
-  // Each returned occurrence is tagged via HolidayOccurrence.observed, so a
-  // caller can tell the two apart. Business-day arithmetic treats both as
-  // non-working days, which is what actually closes an office or a market.
+  // Return the dates the holiday is actually OBSERVED on — the days an office
+  // or market is really shut. Each occurrence is tagged via
+  // HolidayOccurrence.observed so a caller can tell a substitute from a real
+  // date. Calendars differ in how they handle a weekend collision: most ADD the
+  // substitute weekday and keep the actual date too, so both appear; a minority
+  // (the Netherlands, Israel, Chile, Colombia, Argentina and others) RELOCATE
+  // the holiday instead, so only the substitute appears and the actual date is
+  // correctly not a day off. Use ACTUAL_ONLY when you need the holiday's real
+  // calendar date regardless of which policy a calendar follows. Business-day
+  // arithmetic treats every date returned here as non-working.
   INCLUDE_OBSERVED = 1;
   // Include ONLY each holiday's actual calendar date, never a substitute
   // weekday. Use this to ask "when does the holiday really fall?" rather than
@@ -113,7 +119,8 @@ message ExtraHoliday {
   // The ISO 8601 date, "YYYY-MM-DD".
   string date = 1;
   // A label for the day, echoed back on any occurrence returned for this date.
-  // Optional; defaults to "Custom holiday" when empty.
+  // Optional; defaults to "Custom holiday" when empty. If two entries repeat the
+  // same date, the LAST one's name wins.
   string name = 2;
 }
 
@@ -283,9 +290,10 @@ message ClosestHolidayResult {
   bool ok = 1;
   // Set when ok is false.
   Error error = 2;
-  // True when a holiday was found within the years this calendar covers. False
-  // (with ok still true) when the search ran off the end of the calendar's
-  // coverage without finding one.
+  // True when a holiday was found. False (with ok still true) when no holiday
+  // exists in the requested direction within the calendar's year coverage, or
+  // within the bounded window this node scans. A handful of calendars define no
+  // holidays at all, so a false here is a real answer, not a failure.
   bool found = 3;
   // The holiday found. Unset when found is false.
   HolidayOccurrence holiday = 4;

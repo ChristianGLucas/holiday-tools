@@ -5,11 +5,9 @@ description: >-
   Offline public-holiday calendars and business-day arithmetic for 250 countries
   (with US states, German Laender, Canadian provinces and other subdivisions) and
   21 financial-market calendars, wrapping the MIT-licensed `holidays` library.
-  Answers both halves of "what is the next working day?": which dates are
-  holidays, and how to count and move across them. ADVANCE or REWIND N business
-  days, COUNT the business days between two dates, LIST them with a reason for
-  every day skipped, and ROLL a date onto a business day under the standard
-  FOLLOWING / PRECEDING / MODIFIED financial conventions. Fully OFFLINE and
+  ADVANCE or REWIND N business days, COUNT those between two dates, LIST them
+  with a reason for every day skipped, and ROLL a date onto a business day under
+  the standard FOLLOWING / PRECEDING / MODIFIED conventions. Fully OFFLINE and
   DETERMINISTIC - no network call, no rate limit, no outage - so it is safe
   inside a pure-tools flow. That is the deliberate contrast with
   christiangeorgelucas/nager-date-connector, which fetches holiday data live
@@ -18,17 +16,19 @@ description: >-
   spreadsheet's WORKDAY/NETWORKDAYS (via
   christiangeorgelucas/spreadsheet-formula-tools), every node here KNOWS the
   holidays: three business days after 2026-07-02 in the US is 2026-07-08, not
-  the 2026-07-07 a weekend-only calculation returns, because Independence Day is
+  the 2026-07-07 a weekend-only calculation gives, because Independence Day is
   observed on Friday 2026-07-03. The weekend is country-correct rather than
   assumed - Friday/Saturday for Israel, Egypt, Saudi Arabia, Jordan and Qatar,
   Friday alone for Iran - and overridable per request. A holiday observed on a
-  substitute weekday is returned alongside its actual date and explicitly
-  flagged, so the two are never conflated. Every node is CLOCK-FREE: the caller
-  always supplies the date, so results are reproducible across runs and
-  machines. An unknown subdivision, an unsupported language, or a year outside
-  the calendar's real coverage each return a typed error instead of silently
-  falling back to the national calendar or to an empty list. Caller-supplied
-  extra closures (a company shutdown) layer on top.
+  substitute weekday is explicitly flagged, so a substitute is never conflated
+  with a real date; calendars that RELOCATE a holiday instead of duplicating it
+  (the Netherlands, Israel, Chile) are handled correctly, and ACTUAL_ONLY
+  returns the real date either way. Every node is CLOCK-FREE: the caller always
+  supplies the date, so results reproduce across runs and machines. An unknown
+  subdivision, an unsupported language, or a year outside the calendar's real
+  coverage each return a typed error instead of silently falling back to the
+  national calendar or to an empty list. Caller-supplied extra closures (a
+  company shutdown) layer on top.
 nodes:
     - name: IsHoliday
       input: DateQuery
@@ -101,8 +101,9 @@ nodes:
         with how many calendar days away it is. The search is STRICT - a holiday
         on the queried date itself is never returned - so this answers "what is
         the next day off after this date?" and, searching BACKWARD, "when was the
-        last one?". Running past the end of the calendar's year coverage reports
-        found=false rather than erroring. Offline, deterministic, clock-free.
+        last one?". When no holiday exists in that direction within the
+        calendar's coverage, found=false with ok still true rather than an
+        error. Offline, deterministic, clock-free.
     - name: AddBusinessDays
       input: AddBusinessDaysQuery
       output: BusinessDayResult

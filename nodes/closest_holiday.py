@@ -11,9 +11,9 @@ def closest_holiday(ax: AxiomContext, input: ClosestQuery) -> ClosestHolidayResu
     The search is STRICT - a holiday falling on the queried date itself is not
     returned - so this answers "what is the next day off after this date?" and,
     searching BACKWARD, "when was the last one?". Returns the holiday plus how
-    many calendar days away it is. When the search runs past the end of the
-    years the calendar covers without finding one, found is false with ok still
-    true, rather than erroring. Offline and deterministic; the starting date is
+    many calendar days away it is. When no holiday exists in that
+    direction within the calendar's year coverage (or within the bounded window
+    this node scans), found is false with ok still true, rather than erroring. Offline and deterministic; the starting date is
     always the caller's, never the wall clock.
     """
     try:

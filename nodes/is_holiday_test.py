@@ -195,3 +195,28 @@ def test_non_ascii_holiday_names_survive_the_round_trip():
     assert thai.ok, thai.error
     assert any(any("฀" <= ch <= "๿" for ch in h.name) for h in thai.holidays), \
         f"expected Thai script, got {[h.name for h in thai.holidays]}"
+
+
+def test_calendars_that_relocate_a_holiday_are_handled_correctly():
+    """Calendars differ in weekend-collision POLICY, and the shipped docs must
+    match. Most (US) ADD a substitute and keep the actual date, so both appear.
+    A minority (NL) RELOCATE the holiday, so under INCLUDE_OBSERVED only the
+    substitute is a day off and the actual date correctly is not. ACTUAL_ONLY
+    recovers the real calendar date under both policies."""
+    # ADD policy: US Independence Day 2026-07-04 (Sat) keeps its actual date.
+    assert _run(country="US", date="2026-07-04").is_holiday is True
+    assert _run(country="US", date="2026-07-03").is_holiday is True
+
+    # RELOCATE policy: Dutch King's Day 2025-04-27 falls on a Sunday and moves
+    # to Saturday 2025-04-26 — the 27th is genuinely not a day off.
+    actual_day = _run(country="NL", date="2025-04-27")
+    substitute = _run(country="NL", date="2025-04-26")
+    assert actual_day.ok and substitute.ok
+    assert actual_day.is_holiday is False, "a relocated holiday leaves no day off behind"
+    assert substitute.is_holiday is True
+    assert substitute.holidays[0].observed is True
+
+    # ACTUAL_ONLY recovers the real date regardless of policy.
+    recovered = _run(country="NL", date="2025-04-27", observed_rule=2)
+    assert recovered.ok and recovered.is_holiday is True
+    assert recovered.holidays[0].observed is False
