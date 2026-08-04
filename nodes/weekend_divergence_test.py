@@ -60,11 +60,57 @@ CLDR_DISAGREES = {
     "DJ": ([FRI, SAT], [SAT, SUN], "ours — Djibouti rests Friday-Saturday"),
     "MV": ([FRI, SAT], [SAT, SUN], "ours — Maldives rests Friday-Saturday"),
     "BN": ([FRI, SUN], [SAT, SUN], "ours — Brunei's split Friday+Sunday week"),
-    "LY": ([SAT, SUN], [FRI, SAT], "CLDR — Libya rests Friday-Saturday"),
+    # LY and IN are a DIFFERENT KIND of divergence from the four above. Verified
+    # 2026-08-04 by reading the library source: holidays.countries.libya and
+    # holidays.countries.india declare NO `weekend` attribute at all, so both
+    # silently inherit HolidayBase.weekend = {SAT, SUN}. That value is an UNSET
+    # DEFAULT, not a considered position on those countries — the neighbouring
+    # calendars (IL, EG, SA, IR, BD) all DO set it explicitly and correctly.
+    #
+    # LY: no source supports Saturday-Sunday. They disagree only on WHICH
+    #     Friday-inclusive answer is right:
+    #       - ILO NATLEX, Ministerial Order No. 10 of 2012 (primary/legal):
+    #         official working days Saturday-Thursday, Friday the weekly rest
+    #         day  => FRIDAY ONLY.
+    #         https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=93476
+    #       - CLDR, and practice reporting (incl. reports of a 2006 shift from a
+    #         one-day to a two-day weekend) => FRIDAY-SATURDAY.
+    #     Left UN-OVERRIDDEN pending an orchestrator decision: the primary source
+    #     does not confirm the Friday-Saturday value CLDR gives, so overriding to
+    #     it would be substituting one unverified answer for another.
+    # IN: CLDR gives India's official Sunday-only week; Saturday-Sunday is the
+    #     common corporate five-day week. Both describe something real.
+    "LY": ([SAT, SUN], [FRI, SAT], "NEITHER — Sat-Sun is an unset library "
+                                   "default; law says Fri-only, CLDR/practice "
+                                   "say Fri-Sat. Escalated, not overridden."),
     "AF": ([FRI, SAT], [THU, FRI], "contested; Afghanistan has shifted over time"),
     "IN": ([SAT, SUN], [SUN], "contested; CLDR gives the official Sunday-only "
-                              "week, ours the common corporate five-day week"),
+                              "week, ours the common corporate five-day week; "
+                              "upstream sets no weekend for IN either"),
 }
+
+
+def test_libya_and_india_inherit_an_unset_upstream_default():
+    """Pins the ROOT CAUSE for the two sharpest divergences, so it is visible if
+    upstream ever fixes it (at which point this test should start failing and
+    the override question can be retired).
+
+    Unlike Israel/Egypt/Saudi/Iran/Bangladesh — which all declare an explicit
+    `weekend` — the Libya and India calendars declare none and silently inherit
+    HolidayBase's Saturday-Sunday. The value is an absence, not an answer.
+    """
+    import inspect, importlib, re
+
+    def declares_weekend(module_name):
+        src = inspect.getsource(importlib.import_module(f"holidays.countries.{module_name}"))
+        return any(re.match(r"\s*weekend\s*=", line) for line in src.splitlines())
+
+    for mod in ("israel", "egypt", "saudi_arabia", "iran", "bangladesh"):
+        assert declares_weekend(mod), f"{mod} used to declare a weekend explicitly"
+    for mod in ("libya", "india"):
+        assert not declares_weekend(mod), (
+            f"upstream now declares a weekend for {mod} — re-check the divergence "
+            "table above; this package may no longer need to document it.")
 
 
 def test_known_cldr_divergences_are_pinned_not_drifting():
